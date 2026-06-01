@@ -1,4 +1,7 @@
 # ESP32 BLE Time-of-Flight Sensor Tag
+<img width="740" height="526" alt="image" src="https://github.com/user-attachments/assets/e7ece819-1bb4-4792-b318-4294b1f9f42e" />
+<img width="1025" height="738" alt="image" src="https://github.com/user-attachments/assets/3cb8a229-607d-4640-91e9-62d92e481829" />
+<img width="980" height="697" alt="image" src="https://github.com/user-attachments/assets/93c7cf4a-62e1-4d90-a9da-afa708579b19" />
 
 This project is a battery-powered BLE sensor tag built around an ESP32 and a VL53L8CX Time-of-Flight (ToF) sensor. The system continuously captures distance measurements at a fixed rate, stores recent readings in memory, and streams data over Bluetooth Low Energy whenever a client connects.
 
