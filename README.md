@@ -1,460 +1,241 @@
 # ESP32 BLE Time-of-Flight Sensor Tag
 
-A battery-powered Bluetooth Low Energy (BLE) sensor tag built around an ESP32 and the VL53L8CX Time-of-Flight (ToF) sensor. The system performs fixed-rate distance measurements, stores recent data in a ring buffer, and streams measurements over BLE when a connection is available.
+This project is a battery-powered BLE sensor tag built around an ESP32 and a VL53L8CX Time-of-Flight (ToF) sensor. The system continuously captures distance measurements at a fixed rate, stores recent readings in memory, and streams data over Bluetooth Low Energy whenever a client connects.
 
-The project demonstrates embedded system design across hardware, firmware, power management, BLE communication, and real-time task scheduling using FreeRTOS.
-
----
-
-## Features
-
-### Hardware
-
-* ESP32-C3 based design
-* VL53L8CX Time-of-Flight sensor connected over I²C
-* Single-cell LiPo battery support
-* USB charging with BQ-series charger and power-path management
-* Dedicated 3.3 V power rail for MCU and sensor
-* Programming/debug header
-* Test points for board bring-up and validation
-* Low-power sensor control using the VL53L8CX LPn pin
-
-### Firmware
-
-* FreeRTOS task architecture
-* Fixed-rate sensor sampling independent of BLE activity
-* Ring buffer storing the last N seconds of data
-* BLE GATT service with custom Data and Control characteristics
-* Buffered data transmission after reconnection
-* Buffer overflow tracking
-* Optional low-power operation when sampling is disabled
+The goal of this project was to build a complete embedded system, covering hardware design, power management, real-time firmware, BLE communication, and data buffering.
 
 ---
 
-# System Architecture
+## What It Does
 
-```text
-                USB Input
-                    │
-                    ▼
-         ┌─────────────────────┐
-         │ BQ Charger +        │
-         │ Power Path Manager  │
-         └─────────┬───────────┘
-                   │
-                 VSYS
-                   │
-                   ▼
-         ┌─────────────────────┐
-         │ 3.3V Regulation     │
-         └─────────┬───────────┘
-                   │
-      ┌────────────┴────────────┐
-      │                         │
-      ▼                         ▼
- ┌─────────┐              ┌──────────┐
- │ ESP32   │───I²C───────►│ VL53L8CX │
- │ BLE MCU │              │ ToF      │
- └─────────┘              └──────────┘
-      │                         │
-      │                         │
-      └──────INT / LPn──────────┘
-```
+* Measures distance using the VL53L8CX ToF sensor
+* Samples data at a fixed rate (20 Hz by default)
+* Stores the most recent measurements in a ring buffer
+* Streams live or buffered data over BLE
+* Continues sampling even when BLE is disconnected
+* Supports battery-powered operation with USB charging
+* Places the sensor into a low-power state when sampling is disabled
 
 ---
 
-# Hardware Design
+## Hardware Overview
 
-## Power System
+The hardware is based on an ESP32-C3 module connected to a VL53L8CX ToF sensor over I²C.
 
-The device operates from either:
+Power comes from either:
 
-* USB power
 * A single-cell LiPo battery
+* USB power during charging
 
-A BQ-series charger with integrated power-path management allows the system to remain operational while charging.
+A BQ-series charger with power-path management handles charging and automatically switches between USB and battery operation.
 
-### Power Rails
-
-| Rail | Description                             |
-| ---- | --------------------------------------- |
-| VBAT | LiPo battery voltage                    |
-| VSYS | System supply from charger power path   |
-| 3V3  | Regulated supply for ESP32 and VL53L8CX |
-
-### Charger Configuration
-
-The charger is configured using external resistor settings for:
-
-* Charge current
-* Charge termination current
-* Battery safety limits
-
-When USB power is present:
-
-* The system is powered from USB through the power-path circuit.
-* The battery charges simultaneously.
-
-When USB is removed:
-
-* Operation automatically switches to battery power.
-
----
-
-## VL53L8CX Integration
-
-The VL53L8CX communicates with the ESP32 using I²C.
-
-### Signal Connections
-
-| Sensor Pin | Function                          |
-| ---------- | --------------------------------- |
-| SDA        | I²C Data                          |
-| SCL        | I²C Clock                         |
-| INT        | Measurement Ready Interrupt       |
-| LPn        | Sensor Enable / Low-Power Control |
-
-### LPn Usage
-
-The LPn pin is connected to a GPIO on the ESP32.
-
-* LPn HIGH → Sensor active
-* LPn LOW → Sensor disabled / low-power mode
-
-When sampling is stopped, firmware drives LPn low to reduce sensor power consumption.
-
-### I²C Design
-
-* Pull-up resistors included on SDA and SCL
-* Shared 3.3 V logic domain
-* No level shifters required
-
----
-
-## Bring-Up Features
-
-To simplify testing and debugging, dedicated test points are provided for:
-
-* VBAT
-* VSYS
-* 3V3
-* GND
-* Charger status signals
-
-Additional features include:
+For debugging and bring-up, the board includes:
 
 * Programming header
-* Debug access
-* Silkscreen labeling for all major interfaces
+* Test points for VBAT, VSYS, 3V3, and GND
+* Charger status monitoring points
+* Clearly labeled silkscreen
+
+### Sensor Interface
+
+The VL53L8CX is connected over I²C and uses two additional GPIO signals:
+
+* **INT** – Sensor interrupt output
+* **LPn** – Sensor enable/low-power control
+
+The LPn pin is used to enable or disable the sensor from firmware:
+
+* LPn HIGH → Sensor active
+* LPn LOW → Sensor in low-power mode
 
 ---
 
-# Firmware Architecture
+## Firmware Overview
 
-Two primary tasks manage system operation.
+To keep sensor acquisition independent from communication, the application is split into two tasks:
 
-## SensorTask
+### Sensor Task
 
 Responsible for:
 
-* VL53L8CX configuration
-* Fixed-rate sampling
-* Ring-buffer storage
-* Overflow tracking
+* Reading data from the VL53L8CX
+* Maintaining a fixed sampling rate
+* Writing measurements into the ring buffer
+* Tracking buffer overflows
 
-The task operates independently of BLE activity.
-
-### Sampling Rate
-
-Default sampling rate:
-
-```text
-20 Hz
-```
-
-Sampling period:
-
-```text
-50 ms
-```
-
-One ranging frame is captured every 50 ms.
-
-To preserve timing accuracy:
-
-* Sampling runs on a fixed schedule.
-* Excessive UART logging is avoided.
-* Samples exceeding the timing budget are dropped rather than delaying future acquisitions.
-
----
-
-## BLETask
+### BLE Task
 
 Responsible for:
 
-* BLE advertising
-* Connection management
-* Notification transmission
-* Processing control commands
+* BLE advertising and connections
+* Sending notifications
+* Handling control commands
+* Streaming buffered data
 
-BLE operation never blocks sensor acquisition.
-
----
-
-## Thread Safety
-
-The ring buffer is accessed by both SensorTask and BLETask.
-
-A FreeRTOS mutex protects shared data structures to prevent concurrent read/write corruption.
+Since both tasks access the same buffer, a FreeRTOS mutex is used to protect shared data.
 
 ---
 
-# Ring Buffer Design
+## Sampling Strategy
 
-The assignment requires storage of the last N seconds of sensor data.
+The default sampling rate is 20 Hz, which corresponds to one measurement every 50 ms.
 
-Default configuration:
+The sampling task runs on a fixed schedule and is intentionally kept independent of BLE activity. This ensures that sensor timing remains consistent even when notifications are being transmitted.
+
+One practical optimization is minimizing debug print statements. Excessive UART logging can introduce delays that affect timing accuracy, especially when working with millisecond-level scheduling.
+
+If a sensor read ever takes longer than the allocated sampling window, that sample is dropped rather than delaying future measurements. Under normal operating conditions, this is not expected to occur with the selected VL53L8CX configuration.
+
+---
+
+## Ring Buffer Design
+
+The assignment required storing the last **N seconds** of sensor data.
+
+By default:
 
 * Sampling rate = 20 Hz
 * N = 10 seconds
 
-Therefore:
+This results in:
 
-```text
-20 samples/sec × 10 sec = 200 samples
-```
+* 20 samples per second
+* 200 samples stored in memory
 
-### Memory Usage
+For an 8×8 VL53L8CX ranging frame:
 
-The VL53L8CX provides an 8×8 ranging grid.
+* 64 distance values per sample
+* 4 bytes per value
+* 256 bytes per frame
 
-Per sample:
+Memory usage is approximately:
 
-```text
-64 values × 4 bytes = 256 bytes
-```
+* 5 KB per second of buffered data
+* 50 KB for a 10-second history
 
-Per second:
+The values of **N** and buffer size are currently fixed constants for simplicity but can easily be made configurable.
 
-```text
-20 samples × 256 bytes = 5120 bytes
-≈ 5 KB/sec
-```
+### Buffer Overflow Behavior
 
-For N seconds:
+When the buffer becomes full, the oldest data is overwritten.
 
-```text
-Buffer Size = 5120 × N bytes
-```
+For this application, retaining the most recent measurements is more useful than preserving older data, so overwrite-on-full was chosen intentionally.
 
-For N = 10:
-
-```text
-≈ 50 KB
-```
-
-The buffer duration and capacity are currently compile-time constants but can be made configurable in future revisions.
+Different applications may require different strategies depending on how critical the data is.
 
 ---
 
-## Buffer Overflow Handling
+## BLE Control Interface
 
-Distance measurements are considered transient data.
+The BLE service exposes two characteristics:
 
-When the buffer becomes full:
+### Data Characteristic
 
-* New samples overwrite the oldest samples.
-* Overflow events are counted.
+Used for notifications.
 
-This ensures the system always retains the most recent measurements.
+When connected, the client receives:
 
----
+* Live sensor data
+* Previously buffered data
 
-# BLE GATT Service
+### Control Characteristic
 
-## Data Characteristic
-
-Properties:
-
-* Notify
-
-Purpose:
-
-* Live sensor streaming
-* Buffered data transmission after reconnection
-
----
-
-## Control Characteristic
-
-Properties:
-
-* Write
+Used for configuration and runtime control.
 
 Supported commands:
 
-| Command         | Description                |
-| --------------- | -------------------------- |
-| startSampling   | Enable sensor acquisition  |
-| stopSampling    | Disable sensor acquisition |
-| startBLE        | Enable BLE transmission    |
-| stopBLE         | Disable BLE transmission   |
-| SetRate:<value> | Change sampling rate       |
-| Clear           | Clear buffered samples     |
+* `startSampling`
+* `stopSampling`
+* `startBLE`
+* `stopBLE`
+* `SetRate:<value>`
+* `Clear`
 
 ---
 
-# Design Assumptions
+## Why Separate Sampling and BLE?
 
-The original assignment specified generic Start and Stop commands.
+The original assignment mentioned Start and Stop commands, but it was unclear whether those commands should affect the sensor, BLE communication, or both.
 
-To remove ambiguity, the implementation separates sensor acquisition from BLE transmission.
+To make the behavior explicit, the implementation separates them into two independent controls.
 
-### Sensor Control
+### Sampling Control
 
-```text
-startSampling
-stopSampling
-```
+* `startSampling`
+* `stopSampling`
 
-Controls whether the VL53L8CX is actively collecting measurements.
+These commands control whether the sensor is actively acquiring measurements.
 
 ### BLE Control
 
-```text
-startBLE
-stopBLE
-```
+* `startBLE`
+* `stopBLE`
 
-Controls whether data is transmitted over BLE.
+These commands control whether data is transmitted to connected BLE clients.
 
-This separation provides greater flexibility and clearer system behavior.
+This approach makes system behavior easier to understand and provides more flexibility during testing.
 
 ---
 
-# Operating Modes
+## Operating Modes
 
-## Sampling Enabled, BLE Disabled
+### Sampling Enabled, BLE Disabled
 
-```text
-startSampling
-stopBLE
-```
+The sensor continues collecting measurements and storing them in the ring buffer.
 
-Behavior:
+If the buffer fills up, the oldest entries are overwritten.
 
-* Sensor acquires data
-* Measurements stored in ring buffer
-* Oldest data overwritten when full
+### Sampling Disabled
 
----
+The sensor is disabled through the LPn pin and enters a low-power state.
 
-## Sampling Disabled
+### Sampling Enabled, BLE Enabled
 
-```text
-stopSampling
-```
+The system continues collecting measurements while simultaneously transmitting data over BLE.
 
-Behavior:
+When BLE is enabled, buffered measurements are sent first before transitioning to live streaming.
 
-* Sensor inactive
-* LPn driven LOW
-* No new measurements acquired
+### BLE Disabled During Operation
+
+Sensor acquisition continues normally, but measurements are only stored locally.
+
+### Clear Command
+
+Removes all buffered measurements and resets buffer tracking information.
 
 ---
 
-## Sampling Enabled, BLE Enabled
+## Power Management
 
-```text
-startSampling
-startBLE
-```
+The VL53L8CX supports a low-power mode through the LPn pin, which is used whenever sampling is stopped.
 
-Behavior:
+ESP32 light sleep and deep sleep were also evaluated. However, entering sleep causes BLE connections to disconnect, so sleep modes are only practical when both sensor acquisition and BLE communication are inactive.
 
-* Sensor continues sampling
-* Live data streamed over BLE
-* Buffered measurements transmitted first
-* Ring buffer gradually drains
+Because of this, the system remains awake whenever BLE functionality is required.
 
 ---
 
-## BLE Disabled During Operation
+## Testing
 
-```text
-stopBLE
-```
+BLE functionality was tested using nRF Connect.
 
-Behavior:
+The following scenarios were verified:
 
-* Notifications stop
-* Sampling continues
-* New data accumulates in ring buffer
-
----
-
-## Clear Command
-
-```text
-Clear
-```
-
-Behavior:
-
-* Removes all buffered samples
-* Resets buffer indices
-* Resets overflow counters
-
----
-
-# Power Management
-
-## Sensor Low-Power Mode
-
-The VL53L8CX LPn pin is used for sensor power management.
-
-When sampling is disabled:
-
-* LPn is driven LOW
-* Sensor enters low-power mode
-
----
-
-## ESP32 Sleep Modes
-
-Light sleep and deep sleep were evaluated.
-
-A limitation is that BLE connections are lost when entering sleep.
-
-For this reason:
-
-* Sleep modes are only suitable when BLE transmission is not required.
-* The ESP32 remains awake while BLE services are active.
-
----
-
-# Testing
-
-BLE functionality was validated using nRF Connect.
-
-Tested scenarios:
-
-* Sensor sampling with BLE disabled
-* Sensor disabled
-* Sensor sampling with BLE enabled
-* BLE disabled during acquisition
-* Buffer clearing
+* Sampling with BLE disabled
+* Sampling with BLE enabled
+* Stopping and restarting sensor acquisition
+* Stopping and restarting BLE transmission
 * Buffer overflow handling
-* Buffered transmission after reconnection
+* Clearing buffered data
+* Streaming buffered measurements after reconnecting
 
-Observed behavior matched the intended system design.
+The observed behavior matched the intended design in all test cases.
 
 ---
 
-# References
+## References
 
-VL53L8CX Driver and Example Code:
+VL53L8CX Driver Library:
 
-https://github.com/stm32duino/VL53L8CX
-
+[https://github.com/stm32duino/VL53L8CX](https://github.com/stm32duino/VL53L8CX)
 
