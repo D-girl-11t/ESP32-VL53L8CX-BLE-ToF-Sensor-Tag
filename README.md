@@ -10,7 +10,7 @@ The project demonstrates embedded system design across hardware, firmware, power
 
 ### Hardware
 
-* ESP32-C3 / ESP32-S3 based design
+* ESP32-C3 based design
 * VL53L8CX Time-of-Flight sensor connected over I²C
 * Single-cell LiPo battery support
 * USB charging with BQ-series charger and power-path management
