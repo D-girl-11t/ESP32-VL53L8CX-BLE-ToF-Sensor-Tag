@@ -222,15 +222,35 @@ Because of this, the system remains awake whenever BLE functionality is required
 
 BLE functionality was tested using nRF Connect.
 
+<img width="200" height="500" alt="image" src="https://github.com/user-attachments/assets/71d20a55-ddd7-4c0f-8bed-cffe003467ed" />
+<img width="200" height="500" alt="image" src="https://github.com/user-attachments/assets/a22831a3-a2b9-4ed6-b7b1-c2c9eec23a4e" />
+
 The following scenarios were verified:
 
-* Sampling with BLE disabled
-* Sampling with BLE enabled
-* Stopping and restarting sensor acquisition
-* Stopping and restarting BLE transmission
-* Buffer overflow handling
-* Clearing buffered data
-* Streaming buffered measurements after reconnecting
+# Sampling with BLE disabled
+<img width="471" height="1024" alt="image" src="https://github.com/user-attachments/assets/dd14053f-448a-47fa-9cc5-fbb742b4b843" />
+<img width="913" height="796" alt="image" src="https://github.com/user-attachments/assets/51d02783-2a02-4f5b-9978-a91e0c7fadd1" />
+
+# StopSampling and no BLE
+<img width="471" height="1024" alt="image" src="https://github.com/user-attachments/assets/2a094fa7-3d5a-49e7-86a4-50edd532c5ef" />
+<img width="916" height="235" alt="image" src="https://github.com/user-attachments/assets/2149135a-b518-48a5-967c-bb4c200d9d5f" />
+
+# Sampling with BLE enabled
+<img width="471" height="1024" alt="image" src="https://github.com/user-attachments/assets/91e2fcb2-6f91-4338-9e77-10818d60d038" />
+<img width="913" height="757" alt="image" src="https://github.com/user-attachments/assets/f1e894d9-6c26-46d8-a671-46d2317af42c" />
+<img width="471" height="1024" alt="image" src="https://github.com/user-attachments/assets/3835428a-0ef5-4377-86e8-a937a0ed95b7" />
+
+# Stopping and restarting sensor acquisition
+<img width="903" height="672" alt="image" src="https://github.com/user-attachments/assets/dfd702e3-68e1-4548-a319-76c665979c0a" />
+
+# BufferSAMPLING RATE 
+<img width="471" height="1024" alt="image" src="https://github.com/user-attachments/assets/fd930a92-5660-4c11-bfbb-3ea362edb8ec" />
+
+# Clearing buffered data
+<img width="471" height="1024" alt="image" src="https://github.com/user-attachments/assets/eb3bb977-f224-480b-a642-d43940dad946" />
+<img width="814" height="135" alt="image" src="https://github.com/user-attachments/assets/8b9febb5-bb34-44ff-a100-edd79f57d6f3" />
+
+
 
 The observed behavior matched the intended design in all test cases.
 
